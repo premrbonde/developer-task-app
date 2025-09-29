@@ -19,7 +19,7 @@ app.use(express.json());
 app.use('/uploads', express.static('uploads')); // Serve uploaded files
 
 // --- MongoDB Connection ---
-const mongoURI = 'mongodb+srv://premrbonde10_db_user:sisRdiZrm6s5ab44@cluster0.li0bx0a.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0'; // IMPORTANT: Replace with your actual connection string
+const mongoURI = process.env.MONGO_URI; 
 
 mongoose.connect(mongoURI, {
     useNewUrlParser: true,
@@ -60,7 +60,8 @@ const authMiddleware = (req, res, next) => {
 
     try {
         const token = authHeader.split(' ')[1];
-        const decoded = jwt.verify(token, 'this-is-a-very-long-and-super-secret-key-that-nobody-should-know-123!@'); // IMPORTANT: Use a secure secret from environment variables
+        // THIS IS ALSO CORRECTED - IT USES THE VARIABLE FROM RENDER
+        const decoded = jwt.verify(token, process.env.JWT_SECRET); 
         req.user = decoded;
         next();
     } catch (error) {
