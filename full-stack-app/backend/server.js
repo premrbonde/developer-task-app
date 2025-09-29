@@ -1,3 +1,7 @@
+// --- START OF DEBUGGING CODE ---
+console.log('--- SERVER STARTING ---');
+console.log('MONGO_URI from Render Env:', process.env.MONGO_URI);
+// --- END OF DEBUGGING CODE ---
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
