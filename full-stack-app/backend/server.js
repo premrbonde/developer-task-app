@@ -8,7 +8,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-// const upload = require('./middleware/upload'); // Assuming you have this file
 
 // Initialize Express App
 const app = express();
@@ -21,7 +20,6 @@ const jwtSecret = process.env.JWT_SECRET;
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static('uploads')); // Serve uploaded files
 
 // --- MongoDB Connection ---
 mongoose.connect(mongoURI, {
@@ -34,12 +32,11 @@ mongoose.connect(mongoURI, {
 
 // --- Mongoose Schemas ---
 
-// User Schema
+// User Schema (profileImage field removed)
 const userSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true, trim: true },
     email: { type: String, required: true, unique: true, trim: true },
     password: { type: String, required: true },
-    profileImage: { type: String } // Your profileImage field is kept
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);
@@ -63,7 +60,6 @@ const authMiddleware = (req, res, next) => {
 
     try {
         const token = authHeader.split(' ')[1];
-        // CORRECT: Uses the jwtSecret variable from the top
         const decoded = jwt.verify(token, jwtSecret); 
         req.user = decoded;
         next();
@@ -75,8 +71,7 @@ const authMiddleware = (req, res, next) => {
 
 // --- API Routes ---
 
-// 1. User Authentication Routes
-// POST /api/auth/signup - Register a new user
+// POST /api/auth/signup
 app.post('/api/auth/signup', async (req, res) => {
     try {
         const { username, email, password } = req.body;
@@ -98,7 +93,7 @@ app.post('/api/auth/signup', async (req, res) => {
     }
 });
 
-// POST /api/auth/login - Login a user
+// POST /api/auth/login
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -113,7 +108,6 @@ app.post('/api/auth/login', async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
-        // CORRECT: Uses the jwtSecret variable from the top
         const token = jwt.sign({ id: user._id }, jwtSecret, { expiresIn: '1h' });
         res.json({
             token,
@@ -130,8 +124,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 
-// 2. User Profile Routes
-// GET /api/profile - Get user profile
+// GET /api/profile
 app.get('/api/profile', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
@@ -145,17 +138,11 @@ app.get('/api/profile', authMiddleware, async (req, res) => {
     }
 });
 
-// PUT /api/profile - Update user profile
-// NOTE: I've commented out the 'upload' middleware. Render doesn't support file system uploads on the free tier.
-// This route will now only update the username and email.
-app.put('/api/profile', authMiddleware, /* upload.single('profileImage'), */ async (req, res) => {
+// PUT /api/profile
+app.put('/api/profile', authMiddleware, async (req, res) => {
     try {
         const { username, email } = req.body;
         const updateData = { username, email };
-
-        // if (req.file) {
-        //     updateData.profileImage = req.file.path;
-        // }
 
         const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, { new: true }).select('-password');
         if (!updatedUser) {
@@ -169,8 +156,7 @@ app.put('/api/profile', authMiddleware, /* upload.single('profileImage'), */ asy
 });
 
 
-// 3. Notes CRUD Routes
-// (All your note routes are kept exactly as they were, they are correct)
+// Notes CRUD Routes...
 app.post('/api/notes', authMiddleware, async (req, res) => {
     try {
         const { title, content } = req.body;
