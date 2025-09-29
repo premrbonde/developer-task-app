@@ -77,7 +77,7 @@ const ProfilePage = () => {
       <div className="card p-8">
         <h2 className="text-3xl font-bold text-center text-text mb-8">Your Profile</h2>
         
-        <ProfileImageUpload onImageUpload={handleImageUpload} existingImage={user?.profileImage} />
+        {/* <ProfileImageUpload onImageUpload={handleImageUpload} existingImage={user?.profileImage} /> */}
 
         <form onSubmit={handleSubmit} className="space-y-6 mt-8">
           <div className="relative">
