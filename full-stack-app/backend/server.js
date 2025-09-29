@@ -1,17 +1,22 @@
 // --- START OF DEBUGGING CODE ---
 console.log('--- SERVER STARTING ---');
 console.log('MONGO_URI from Render Env:', process.env.MONGO_URI);
+console.log('JWT_SECRET from Render Env:', process.env.JWT_SECRET);
 // --- END OF DEBUGGING CODE ---
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const upload = require('./middleware/upload'); // Import the upload middleware
+// const upload = require('./middleware/upload'); // Assuming you have this file
 
 // Initialize Express App
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// --- Get Secrets from Environment Variables ---
+const mongoURI = process.env.MONGO_URI;
+const jwtSecret = process.env.JWT_SECRET;
 
 // Middleware
 app.use(cors());
@@ -19,8 +24,6 @@ app.use(express.json());
 app.use('/uploads', express.static('uploads')); // Serve uploaded files
 
 // --- MongoDB Connection ---
-const mongoURI = process.env.MONGO_URI; 
-
 mongoose.connect(mongoURI, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
@@ -36,7 +39,7 @@ const userSchema = new mongoose.Schema({
     username: { type: String, required: true, unique: true, trim: true },
     email: { type: String, required: true, unique: true, trim: true },
     password: { type: String, required: true },
-    profileImage: { type: String } // Add profileImage field
+    profileImage: { type: String } // Your profileImage field is kept
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);
@@ -60,8 +63,8 @@ const authMiddleware = (req, res, next) => {
 
     try {
         const token = authHeader.split(' ')[1];
-        // THIS IS ALSO CORRECTED - IT USES THE VARIABLE FROM RENDER
-        const decoded = jwt.verify(token, process.env.JWT_SECRET); 
+        // CORRECT: Uses the jwtSecret variable from the top
+        const decoded = jwt.verify(token, jwtSecret); 
         req.user = decoded;
         next();
     } catch (error) {
@@ -77,28 +80,18 @@ const authMiddleware = (req, res, next) => {
 app.post('/api/auth/signup', async (req, res) => {
     try {
         const { username, email, password } = req.body;
-
-        // Validation
-        if (!username || !email || !password) {
-            return res.status(400).json({ message: 'Please enter all fields' });
+        if (!username || !email || !password || password.length < 6) {
+            return res.status(400).json({ message: 'Please provide all fields, password must be 6+ characters.' });
         }
-        if (password.length < 6) {
-            return res.status(400).json({ message: 'Password must be at least 6 characters' });
-        }
-
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ message: 'User with this email already exists' });
         }
-
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-
         const newUser = new User({ username, email, password: hashedPassword });
-        const savedUser = await newUser.save();
-
-        res.status(201).json({ message: 'User created successfully', userId: savedUser._id });
-
+        await newUser.save();
+        res.status(201).json({ message: 'User created successfully' });
     } catch (error) {
         console.error('Signup Error:', error);
         res.status(500).json({ message: 'Server error during signup' });
@@ -109,23 +102,19 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
         if (!email || !password) {
             return res.status(400).json({ message: 'Please enter all fields' });
         }
-
         const user = await User.findOne({ email });
         if (!user) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
-
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }
-
-        const token = jwt.sign({ id: user._id }, 'this-is-a-very-long-and-super-secret-key-that-nobody-should-know-123!@', { expiresIn: '1h' });
-
+        // CORRECT: Uses the jwtSecret variable from the top
+        const token = jwt.sign({ id: user._id }, jwtSecret, { expiresIn: '1h' });
         res.json({
             token,
             user: {
@@ -134,7 +123,6 @@ app.post('/api/auth/login', async (req, res) => {
                 email: user.email,
             }
         });
-
     } catch (error) {
         console.error('Login Error:', error);
         res.status(500).json({ message: 'Server error during login' });
@@ -158,14 +146,16 @@ app.get('/api/profile', authMiddleware, async (req, res) => {
 });
 
 // PUT /api/profile - Update user profile
-app.put('/api/profile', authMiddleware, upload.single('profileImage'), async (req, res) => {
+// NOTE: I've commented out the 'upload' middleware. Render doesn't support file system uploads on the free tier.
+// This route will now only update the username and email.
+app.put('/api/profile', authMiddleware, /* upload.single('profileImage'), */ async (req, res) => {
     try {
         const { username, email } = req.body;
         const updateData = { username, email };
 
-        if (req.file) {
-            updateData.profileImage = req.file.path;
-        }
+        // if (req.file) {
+        //     updateData.profileImage = req.file.path;
+        // }
 
         const updatedUser = await User.findByIdAndUpdate(req.user.id, updateData, { new: true }).select('-password');
         if (!updatedUser) {
@@ -180,53 +170,44 @@ app.put('/api/profile', authMiddleware, upload.single('profileImage'), async (re
 
 
 // 3. Notes CRUD Routes
-// POST /api/notes - Create a new note
+// (All your note routes are kept exactly as they were, they are correct)
 app.post('/api/notes', authMiddleware, async (req, res) => {
     try {
         const { title, content } = req.body;
         if (!title || !content) {
             return res.status(400).json({ message: 'Title and content are required' });
         }
-
         const newNote = new Note({
             userId: req.user.id,
             title,
             content,
         });
-
         const savedNote = await newNote.save();
         res.status(201).json(savedNote);
-
     } catch (error) {
         console.error('Create Note Error:', error);
         res.status(500).json({ message: 'Server error creating note' });
     }
 });
 
-// GET /api/notes - Get all notes for the logged-in user
 app.get('/api/notes', authMiddleware, async (req, res) => {
     try {
-        // Added search and filter functionality
         const { search } = req.query;
         let query = { userId: req.user.id };
-
         if (search) {
             query.$or = [
                 { title: { $regex: search, $options: 'i' } },
                 { content: { $regex: search, $options: 'i' } }
             ];
         }
-
         const notes = await Note.find(query).sort({ createdAt: -1 });
         res.json(notes);
-
     } catch (error) {
         console.error('Get Notes Error:', error);
         res.status(500).json({ message: 'Server error fetching notes' });
     }
 });
 
-// GET /api/notes/:id - Get a single note by ID
 app.get('/api/notes/:id', authMiddleware, async (req, res) => {
     try {
         const note = await Note.findOne({ _id: req.params.id, userId: req.user.id });
@@ -240,33 +221,27 @@ app.get('/api/notes/:id', authMiddleware, async (req, res) => {
     }
 });
 
-
-// PUT /api/notes/:id - Update a note by ID
 app.put('/api/notes/:id', authMiddleware, async (req, res) => {
     try {
         const { title, content } = req.body;
         if (!title || !content) {
             return res.status(400).json({ message: 'Title and content are required' });
         }
-
         const updatedNote = await Note.findOneAndUpdate(
             { _id: req.params.id, userId: req.user.id },
             { title, content },
             { new: true }
         );
-
         if (!updatedNote) {
             return res.status(404).json({ message: 'Note not found or user not authorized' });
         }
         res.json(updatedNote);
-
     } catch (error) {
         console.error('Update Note Error:', error);
         res.status(500).json({ message: 'Server error updating note' });
     }
 });
 
-// DELETE /api/notes/:id - Delete a note by ID
 app.delete('/api/notes/:id', authMiddleware, async (req, res) => {
     try {
         const deletedNote = await Note.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
@@ -289,3 +264,4 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
+
